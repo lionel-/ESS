@@ -35,4 +35,5 @@ script:
 - emacs --version
 - R --version
 - make all
+- make install
 - make test
