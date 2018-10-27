@@ -194,7 +194,7 @@ test file, add a .el file with the same base name.")
     (condition-case cnd
         (let* ((test-case (progn
                             (skip-chars-forward " \t\n")
-                            (elt-process-case)))
+                            (elt-process-case chunk-end)))
                (test-case-state test-case))
           (while (looking-at (elt--code-chunk-re))
             (elt-process-next-subchunk chunk-end))
@@ -212,7 +212,7 @@ test file, add a .el file with the same base name.")
 
 (defun elt-process-next-subchunk (chunk-end)
   (let* ((continuation (looking-at elt-code-chunk-next-re))
-         (test-code (elt-process-code))
+         (test-code (elt-process-code chunk-end))
          (test-result (elt-run- (if continuation test-case-state test-case)
                                 test-code elt-init-alist
                             continuation))
@@ -224,7 +224,7 @@ test file, add a .el file with the same base name.")
     (delete-region (point) subchunk-end)
     (insert (concat "\n" test-result "\n\n"))))
 
-(defun elt-process-case ()
+(defun elt-process-case (chunk-end)
   (let ((case-start (progn
                       (skip-chars-forward " \t\n")
                       (goto-char (line-beginning-position))
@@ -240,7 +240,7 @@ test file, add a .el file with the same base name.")
     (insert "\n")
     (buffer-substring-no-properties case-start case-end)))
 
-(defun elt-process-code ()
+(defun elt-process-code (chunk-end)
   (let* ((test-start (point))
          (test-end (if (re-search-forward "^$" chunk-end t)
                        (1- (match-beginning 0))
