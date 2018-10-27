@@ -1,3 +1,4 @@
+;;; ess-literate-tests.el --- Literate unit testing  -*- lexical-binding: t; -*-
 
 (eval-when-compile
   (require 'cl-lib))
