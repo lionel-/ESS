@@ -15,7 +15,7 @@
 
 (message "\nStarting literate tests")
 
-(mapc (lambda (file)
-        (elt-do 'regenerate (expand-file-name file ess-literate-path)))
-      '("elt.R" "roxy.R" "code-fill.R" "misc.R" "syntax.R" "tokens.R"
-        "fontification.R" "keybindings.R"))
+(dolist (file '("elt.R" "roxy.R" "code-fill.R" "misc.R" "syntax.R" "tokens.R"
+                "fontification.R" "keybindings.R"))
+  (with-elt-r
+    (elt-do 'regenerate nil (expand-file-name file ess-literate-path))))

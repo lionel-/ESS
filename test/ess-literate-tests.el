@@ -3,29 +3,80 @@
   (require 'cl-lib))
 (require 'ert)
 
+
+(defvar-local elt-case-title-re nil
+  "Regexp matching the commented test case title.
+This starts a new test case and defines a title for it. The text
+between the case title and the first code chunk is taken as the
+starting chunk.")
+
+(defvar-local elt-code-chunk-re nil
+  "Regexp matching the start of a commented code chunk.
+The elisp code in this comment chunk is run in a buffer
+containing the starting chunk.")
+
+(defvar-local elt-code-chunk-next-re nil
+  "Regexp matching the start of a commented continuation chunk.
+The elisp code in this comment chunk is run in a buffer
+containing the output of the precedent chunk.")
+
+(defvar-local elt-section-title-re nil
+  "Regexp matching a section title.
+These titles don't have any effect except for being printed in
+the output.")
+
+(defvar-local elt-init-alist nil
+  "Alist of mode settings for test chunks.
+This alist is appended to the file-local variables. It should
+contain a `mode' entry. To use file-local variables specific to a
+test file, add a .el file with the same base name.")
+
+(defun elt--get-local-config ()
+  (list elt-section-title-re            ; 0
+        elt-case-title-re               ; 1
+        elt-code-chunk-re               ; 2
+        elt-code-chunk-next-re          ; 3
+        elt-init-alist))                ; 4
+
+(defun elt--set-local-config (cfg)
+  (setq-local elt-section-title-re (nth 0 cfg))
+  (setq-local elt-case-title-re (nth 1 cfg))
+  (setq-local elt-code-chunk-re (nth 2 cfg))
+  (setq-local elt-code-chunk-next-re (nth 3 cfg))
+  (setq-local elt-init-alist (nth 4 cfg)))
+
+(defun elt--code-chunk-re ()
+  (concat
+   "\\("
+   elt-code-chunk-re
+   "\\)\\|\\("
+   elt-code-chunk-next-re
+   "\\)"))
+
 (defmacro elt-deftest (name args file)
-  `(ert-deftest ,name ,args
-     (let ((inhibit-message ess-inhibit-message-in-tests)
-           (path (expand-file-name ,file "literate")))
-       (elt-do 'test path))))
+  `(progn
+     ;; Record current ELT config in the property list of NAME
+     (define-symbol-prop ',name 'elt--test-config ',(elt--get-local-config))
+     (ert-deftest ,name ()
+       (let ((inhibit-message ess-inhibit-message-in-tests)
+             (path (expand-file-name ,file "literate")))
+         (elt-do 'test ',name path)))))
 
-(defun elt--activate-font-lock-keywords ()
-  "Activate font-lock keywords for some of ELT's symbols."
-  (font-lock-add-keywords
-   nil
-   '(("(\\(\\<elt-deftest\\)\\>\\s *\\(\\(?:\\sw\\|\\s_\\)+\\)?"
-      (1 font-lock-keyword-face nil t)
-      (2 font-lock-function-name-face nil t)))))
-(add-hook 'emacs-lisp-mode-hook #'elt--activate-font-lock-keywords)
+(defmacro with-elt-r (&rest body)
+  (declare (indent 0)
+           (debug (&rest form)))
+  `(let ((elt-section-title-re "^##### \\([^\n]*\\)$")
+         (elt-case-title-re "^###[ \t]*\\([0-9]+[a-zA-Z]*\\) \\([^\n]*\\)$")
+         (elt-code-chunk-re "^##!")
+         (elt-code-chunk-next-re "^##>")
+         (elt-init-alist '((mode . R))))
+     ,@body))
 
-(defvar elt-ess-r-chunk-pattern "^###[ \t]*\\([0-9]+[a-zA-Z]*\\) \\([^\n]*\\)$")
-(defvar elt-ess-r-code-start-pattern "^##!")
-(defvar elt-ess-r-code-cont-pattern "^##>")
-(defvar elt-ess-r-code-pattern "^##[!>]")
-(defvar elt-ess-r-section-pattern "^##### \\([^\n]*\\)$")
-(defvar elt-ess-r-mode-init '((mode . R)))
+(defmacro elt-r-deftest (name args file)
+  `(with-elt-r
+     (elt-deftest ,name ,args ,file)))
 
-(defun elt-do (action file)
+(defun elt-do (action name file)
   (unless (memq action '(test regenerate))
     (error "Invalid literate test action"))
   (let ((verb (if (eq action 'test)
@@ -37,7 +88,9 @@
                        (error "Can't find literate test file")))
          (src-string (with-current-buffer src-buffer
                        (buffer-string)))
-         (output (elt-buffer-string file src-string)))
+         (config (or (get name 'elt--test-config)
+                     (elt--get-local-config)))
+         (output (elt-buffer-string file src-string config)))
     (pcase action
       (`test (should (string= src-string output)))
       (`regenerate (with-current-buffer src-buffer
@@ -45,7 +98,17 @@
                      (insert output)
                      (save-buffer))))))
 
-(defun elt-buffer-string (file src-string)
+(defun elt--activate-font-lock-keywords ()
+  "Activate font-lock keywords for some of ELT's symbols."
+  (font-lock-add-keywords
+   nil
+   '(("(\\(\\<elt-.*deftest\\)\\>\\s *\\(\\(?:\\sw\\|\\s_\\)+\\)?"
+      (1 font-lock-keyword-face nil t)
+      (2 font-lock-function-name-face nil t)))))
+(add-hook 'emacs-lisp-mode-hook #'elt--activate-font-lock-keywords)
+
+;; Need to make -pattern buffer-local-variables
+(defun elt-buffer-string (file src-string config)
   (let ((el-file (concat (file-name-sans-extension file) ".el")))
     (when (file-exists-p el-file)
       (load-file el-file)))
@@ -54,15 +117,16 @@
     ;; Don't check safety of local variables declared in test files
     (cl-letf (((symbol-function 'safe-local-variable-p) (lambda (sym val) t)))
       (let ((enable-dir-local-variables nil))
-        (hack-local-variables)))
-    (let ((elt-chunk-pattern elt-ess-r-chunk-pattern)
-          (elt-code-cont-pattern elt-ess-r-code-cont-pattern)
-          (elt-code-pattern elt-ess-r-code-pattern)
-          (elt-section-pattern elt-ess-r-section-pattern)
-          (elt-mode-init (append (assq-delete-all 'mode file-local-variables-alist)
-                                 elt-ess-r-mode-init)))
-      (elt-this-buffer)
-      (buffer-string))))
+        (hack-local-variables)
+        (elt--set-local-config config)
+        (unless (and elt-case-title-re
+                     elt-code-chunk-re
+                     elt-code-chunk-next-re
+                     elt-section-title-re
+                     elt-init-alist)
+          (error "ELT configuration must be set"))))
+    (elt-this-buffer)
+    (buffer-string)))
 
 (defun elt-this-buffer ()
   (goto-char 1)
@@ -71,7 +135,7 @@
     ;; Print first section header
     (elt-print-section-header)
     (when (elt-search-chunk nil t)
-      (while (looking-at elt-chunk-pattern)
+      (while (looking-at elt-case-title-re)
         (elt-print-chunk-id)
         (elt-process-next-chunk)))
     (skip-chars-backward "\n")
@@ -92,7 +156,7 @@
 (defun elt-print-section-header ()
   (save-excursion
     (skip-chars-forward " \n\t")
-    (when (looking-at elt-section-pattern)
+    (when (looking-at elt-section-title-re)
       (message (match-string-no-properties 1)))))
 
 (defun elt-print-chunk-id ()
@@ -105,14 +169,14 @@
 
 (defun elt-search-chunk (&optional n skip-section)
   (let* ((next-chunk (save-excursion
-                       (cond ((re-search-forward elt-chunk-pattern
+                       (cond ((re-search-forward elt-case-title-re
                                                  nil t (or n 1))
                               (match-beginning 0))
                              ((elt-local-variables-pos))
                              (t
                               (point-max)))))
          (next-section (save-excursion
-                         (when (re-search-forward elt-section-pattern
+                         (when (re-search-forward elt-section-title-re
                                                   next-chunk t)
                            (match-beginning 0)))))
     (goto-char (if (and (not skip-section) next-section)
@@ -132,11 +196,11 @@
                             (skip-chars-forward " \t\n")
                             (elt-process-case)))
                (test-case-state test-case))
-          (while (looking-at elt-code-pattern)
+          (while (looking-at (elt--code-chunk-re))
             (elt-process-next-subchunk chunk-end))
           (insert "\n")
           (elt-print-section-header)
-          (when (looking-at elt-section-pattern)
+          (when (looking-at elt-section-title-re)
             (insert "\n")
             (elt-search-chunk nil t)))
       (ert-test-skipped
@@ -147,13 +211,13 @@
         nil))))
 
 (defun elt-process-next-subchunk (chunk-end)
-  (let* ((continuation (looking-at elt-code-cont-pattern))
+  (let* ((continuation (looking-at elt-code-chunk-next-re))
          (test-code (elt-process-code))
          (test-result (elt-run- (if continuation test-case-state test-case)
-                            test-code elt-mode-init
+                                test-code elt-init-alist
                             continuation))
          (subchunk-end (save-excursion
-                         (if (re-search-forward elt-code-pattern chunk-end t)
+                         (if (re-search-forward (elt--code-chunk-re) chunk-end t)
                              (match-beginning 0)
                            chunk-end))))
     (setq test-case-state test-result)
@@ -165,9 +229,9 @@
                       (skip-chars-forward " \t\n")
                       (goto-char (line-beginning-position))
                       (point)))
-        (code-start (if (re-search-forward elt-code-pattern chunk-end t)
+        (code-start (if (re-search-forward (elt--code-chunk-re) chunk-end t)
                         (goto-char (match-beginning 0))
-                      (error "No test code found")))
+                      (error "No code chunk found")))
         (case-end (progn
                     (skip-chars-backward " \t\n")
                     (point))))
@@ -183,8 +247,7 @@
                      (goto-char chunk-end)))
          (test-code (buffer-substring-no-properties test-start test-end)))
     ;; Remove comment prefix
-    (while (string-match (concat (substring elt-code-pattern 1) "[ \t]?")
-                         test-code)
+    (while (string-match (elt--code-chunk-re) test-code)
       (setq test-code (replace-match "" t t test-code)))
     ;; Parse elisp
     (setq test-code (concat "(" test-code ")"))
