@@ -223,11 +223,11 @@ test file, add a .el file with the same base name.")
          (test-output (elt-run- (if continuation current-chunk starting-chunk)
                                 test-forms elt-init-alist
                                 continuation))
-         (subchunk-end (save-excursion
-                         (if (re-search-forward (elt--code-chunk-re) case-end t)
-                             (match-beginning 0)
-                           case-end))))
-    (delete-region (point) subchunk-end)
+         (output-end-pos (save-excursion
+                           (if (re-search-forward (elt--code-chunk-re) case-end t)
+                               (match-beginning 0)
+                             case-end))))
+    (delete-region (point) output-end-pos)
     (insert (concat "\n" test-output "\n\n"))
     test-output))
 
