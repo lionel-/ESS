@@ -5,6 +5,8 @@
 (require 'ert)
 
 
+;;*;; Configuration
+
 (defvar-local elt-case-title-re nil
   "Regexp matching the commented test case title.
 This starts a new test case and defines a title for it. The text
@@ -53,6 +55,9 @@ test file, add a .el file with the same base name.")
    "\\)\\|\\("
    elt-code-chunk-next-re
    "\\)"))
+
+
+;;*;; Defining test files
 
 (defmacro elt-deftest (name _args file)
   `(progn
@@ -108,7 +113,9 @@ test file, add a .el file with the same base name.")
       (2 font-lock-function-name-face nil t)))))
 (add-hook 'emacs-lisp-mode-hook #'elt--activate-font-lock-keywords)
 
-;; Need to make -pattern buffer-local-variables
+
+;;*;; Processing test files
+
 (defun elt-buffer-string (file src-string config)
   (let ((el-file (concat (file-name-sans-extension file) ".el")))
     (when (file-exists-p el-file)
@@ -148,26 +155,6 @@ test file, add a .el file with the same base name.")
       (insert "\n"))
     (undo-boundary)))
 
-(defun elt-local-variables-pos ()
-  (save-excursion
-    (let ((pattern (concat "^" comment-start "+ +Local Variables:")))
-      (when (re-search-forward pattern nil t)
-        (match-beginning 0)))))
-
-(defun elt-print-section-header ()
-  (save-excursion
-    (skip-chars-forward " \n\t")
-    (when (looking-at elt-section-title-re)
-      (message (match-string-no-properties 1)))))
-
-(defun elt-print-chunk-id ()
-  (let ((number (concat "#" (match-string-no-properties 1)))
-        (msg (match-string-no-properties 2)))
-    (setq msg (substring msg 0 (string-match "-+$" msg)))
-    (message (if (> (length msg) 0)
-                 (concat number " - " msg)
-               number))))
-
 (defun elt-search-chunk (&optional n skip-section)
   (let* ((next-chunk (save-excursion
                        (cond ((re-search-forward elt-case-title-re
@@ -183,6 +170,12 @@ test file, add a .el file with the same base name.")
     (goto-char (if (and (not skip-section) next-section)
                    next-section
                  next-chunk))))
+
+(defun elt-local-variables-pos ()
+  (save-excursion
+    (let ((pattern (concat "^" comment-start "+ +Local Variables:")))
+      (when (re-search-forward pattern nil t)
+        (match-beginning 0)))))
 
 (defun elt-process-next-chunk ()
   (let* ((chunk-beg (point))
@@ -211,20 +204,6 @@ test file, add a .el file with the same base name.")
         (insert orig-chunk)
         nil))))
 
-(defun elt-process-next-subchunk (chunk-end test-case-state test-case)
-  (let* ((continuation (looking-at elt-code-chunk-next-re))
-         (test-code (elt-process-code chunk-end))
-         (test-result (elt-run- (if continuation test-case-state test-case)
-                                test-code elt-init-alist
-                                continuation))
-         (subchunk-end (save-excursion
-                         (if (re-search-forward (elt--code-chunk-re) chunk-end t)
-                             (match-beginning 0)
-                           chunk-end))))
-    (delete-region (point) subchunk-end)
-    (insert (concat "\n" test-result "\n\n"))
-    test-result))
-
 (defun elt-process-case (chunk-end)
   (let ((case-start (progn
                       (skip-chars-forward " \t\n")
@@ -241,6 +220,20 @@ test file, add a .el file with the same base name.")
     (insert "\n")
     (buffer-substring-no-properties case-start case-end)))
 
+(defun elt-process-next-subchunk (chunk-end test-case-state test-case)
+  (let* ((continuation (looking-at elt-code-chunk-next-re))
+         (test-code (elt-process-code chunk-end))
+         (test-result (elt-run- (if continuation test-case-state test-case)
+                                test-code elt-init-alist
+                                continuation))
+         (subchunk-end (save-excursion
+                         (if (re-search-forward (elt--code-chunk-re) chunk-end t)
+                             (match-beginning 0)
+                           chunk-end))))
+    (delete-region (point) subchunk-end)
+    (insert (concat "\n" test-result "\n\n"))
+    test-result))
+
 (defun elt-process-code (chunk-end)
   (let* ((test-start (point))
          (test-end (if (re-search-forward "^$" chunk-end t)
@@ -254,6 +247,25 @@ test file, add a .el file with the same base name.")
     (setq test-code (concat "(" test-code ")"))
     (car (read-from-string test-code))))
 
+
+;;;*;;; Printing progress
+
+(defun elt-print-section-header ()
+  (save-excursion
+    (skip-chars-forward " \n\t")
+    (when (looking-at elt-section-title-re)
+      (message (match-string-no-properties 1)))))
+
+(defun elt-print-chunk-id ()
+  (let ((number (concat "#" (match-string-no-properties 1)))
+        (msg (match-string-no-properties 2)))
+    (setq msg (substring msg 0 (string-match "-+$" msg)))
+    (message (if (> (length msg) 0)
+                 (concat number " - " msg)
+               number))))
+
+
+;;*;; Running test code
 
 ;; The following functions are borrowed from Lispy's testing
 ;; framework. The main difference is that they restore state when
