@@ -141,10 +141,10 @@ test file, add a .el file with the same base name.")
   (let ((undo-inhibit-record-point t))
     (undo-boundary)
     ;; Print first section header
-    (elt-print-section-header)
+    (elt--print-section-title)
     (when (elt-search-chunk nil t)
       (while (looking-at elt-case-title-re)
-        (elt-print-chunk-id)
+        (elt--print-case-title)
         (elt-process-next-chunk)))
     (skip-chars-backward "\n")
     (let ((point-max (or (elt-local-variables-pos)
@@ -160,7 +160,7 @@ test file, add a .el file with the same base name.")
                        (cond ((re-search-forward elt-case-title-re
                                                  nil t (or n 1))
                               (match-beginning 0))
-                             ((elt-local-variables-pos))
+                             ((elt--find-local-variables-pos))
                              (t
                               (point-max)))))
          (next-section (save-excursion
@@ -171,7 +171,7 @@ test file, add a .el file with the same base name.")
                    next-section
                  next-chunk))))
 
-(defun elt-local-variables-pos ()
+(defun elt--find-local-variables-pos ()
   (save-excursion
     (let ((pattern (concat "^" comment-start "+ +Local Variables:")))
       (when (re-search-forward pattern nil t)
@@ -193,7 +193,7 @@ test file, add a .el file with the same base name.")
           (while (looking-at (elt--code-chunk-re))
             (setq test-case-state (elt-process-next-subchunk chunk-end test-case-state test-case)))
           (insert "\n")
-          (elt-print-section-header)
+          (elt--print-section-title)
           (when (looking-at elt-section-title-re)
             (insert "\n")
             (elt-search-chunk nil t)))
@@ -250,13 +250,13 @@ test file, add a .el file with the same base name.")
 
 ;;;*;;; Printing progress
 
-(defun elt-print-section-header ()
+(defun elt--print-section-title ()
   (save-excursion
     (skip-chars-forward " \n\t")
     (when (looking-at elt-section-title-re)
       (message (match-string-no-properties 1)))))
 
-(defun elt-print-chunk-id ()
+(defun elt--print-case-title ()
   (let ((number (concat "#" (match-string-no-properties 1)))
         (msg (match-string-no-properties 2)))
     (setq msg (substring msg 0 (string-match "-+$" msg)))
