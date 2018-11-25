@@ -57,6 +57,31 @@ test file, add a .el file with the same base name.")
    "\\)"))
 
 
+(defvar elt--chunk-head-re
+  "^[ \t]*```\\([[:alpha:]]+\\) \\([[:alpha:]]+\\) ?\\([[:alpha:] \t].*\\)?$")
+
+(defvar elt--chunk-tail-re
+  "^[ \t]*```[ \t]*$")
+
+(defvar elt--section-re
+  "^#+[ \t]\\(.+\\)$")
+
+(defun elt--scan-chunks ()
+  (save-excursion
+    (goto-char (point-min))
+    (let (chunks)
+      (while (re-search-forward elt--chunk-head-re nil t)
+        (push (list (cons 'type (intern (match-string-no-properties 2)))
+                    (cons 'beg (1+ (match-end 0)))
+                    (cons 'end (save-match-data
+                                 (if (re-search-forward elt--chunk-tail-re nil t)
+                                     (1- (match-beginning 0))
+                                   (error "Can't find end of chunk"))))
+                    (cons 'mode (intern (match-string-no-properties 1)))
+                    (cons 'args (match-string-no-properties 3)))
+              chunks))
+      (nreverse chunks))))
+
 ;;*;; Defining test files
 
 (defmacro elt-deftest (name _args file)
