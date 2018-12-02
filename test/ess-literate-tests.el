@@ -66,6 +66,28 @@ test file, add a .el file with the same base name.")
 (defvar elt--section-re
   "^#+[ \t]\\(.+\\)$")
 
+(defun elt--define-test (info)
+  (let ((name (intern (elt--normalise-title (car info)))))
+    (ert-set-test name
+                  (make-ert-test
+                   :name name
+                   :body (lambda () (elt--run-tests name info))))))
+
+(defun elt-load-file (&optional path)
+  (setq path (or path
+                 buffer-file-name
+                 (error "No PATH provided")))
+  (let ((cases (with-current-buffer
+                   (find-file-noselect path)
+                 (elt--scan-cases))))
+    (mapc #'elt--define-test cases)))
+
+(defun elt--normalise-title (title)
+  (replace-regexp-in-string "[^[:alnum:]]" "-" title))
+
+(defun elt--run-tests (_name _info)
+  (error "TODO"))
+
 (defun elt--scan-cases ()
   (let ((chunks (elt--scan-chunks))
         cases last-title)
