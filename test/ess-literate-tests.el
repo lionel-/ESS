@@ -61,7 +61,7 @@ test file, add a .el file with the same base name.")
 
 
 (defvar elt--chunk-head-re
-  "^[ \t]*```\\([[:alpha:]]+\\) \\([[:alpha:]]+\\) ?\\([[:alpha:] \t].*\\)?$")
+  "^[ \t]*```\\([[:alpha:]]+\\) ?\\([[:alpha:]]+\\)? ?\\([[:alpha:] \t].*\\)?$")
 
 (defvar elt--chunk-tail-re
   "^[ \t]*```[ \t]*$")
@@ -121,15 +121,20 @@ test file, add a .el file with the same base name.")
     (goto-char (point-min))
     (let (chunks)
       (while (re-search-forward elt--chunk-head-re nil t)
-        (push (list (cons 'type (intern (match-string-no-properties 2)))
-                    (cons 'beg (1+ (match-end 0)))
-                    (cons 'end (save-match-data
-                                 (if (re-search-forward elt--chunk-tail-re nil t)
-                                     (1- (match-beginning 0))
-                                   (error "Can't find end of chunk"))))
-                    (cons 'mode (intern (match-string-no-properties 1)))
-                    (cons 'args (match-string-no-properties 3)))
-              chunks))
+        (let* ((mode (intern (match-string-no-properties 1)))
+               (type (intern (or (match-string-no-properties 2)
+                                 (if (eq mode 'elisp)
+                                     "test"
+                                   (signal 'elt--unknown-chunk-type nil)))))
+               (chunk (list (cons 'type type)
+                            (cons 'beg (1+ (match-end 0)))
+                            (cons 'end (save-match-data
+                                         (if (re-search-forward elt--chunk-tail-re nil t)
+                                             (1- (match-beginning 0))
+                                           (error "Can't find end of chunk"))))
+                            (cons 'mode mode)
+                            (cons 'args (match-string-no-properties 3)))))
+          (push chunk chunks)))
       (nreverse chunks))))
 
 ;;*;; Defining test files
@@ -480,5 +485,8 @@ This is to `put' what `defalias' is to `fset'."
 
 (define-error 'elt--bad-case-chunk
   "Section must open with a case chunk")
+
+(define-error 'elt--unknown-chunk-type
+  "Can't find chunk type")
 
 (provide 'elt)
