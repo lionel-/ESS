@@ -75,7 +75,7 @@ test file, add a .el file with the same base name.")
     (ert-set-test name
                   (make-ert-test
                    :name name
-                   :body (lambda () (elt--run-tests name info))))))
+                   :body (lambda () (elt--run-tests name info nil))))))
 
 (defun elt-load-file (&optional path)
   (let* ((path (elt--path path))
@@ -85,8 +85,38 @@ test file, add a .el file with the same base name.")
 (defun elt--normalise-title (title)
   (downcase (replace-regexp-in-string "[^[:alnum:]]" "-" title)))
 
-(defun elt--run-tests (_name _info)
-  (error "TODO"))
+(defun elt--run-tests (name chunks generate)
+  (let* ((test-buffer (find-file-noselect (get name 'elt-file)))
+         (case-chunk (pop chunks))
+         (case-code (elt--read-chunk case-chunk test-buffer))
+         (case-init (list (assq 'mode case-chunk))))
+    (while chunks
+      (let* ((test-chunk (pop chunks))
+             (test-forms (elt--read-test-chunk test-chunk test-buffer))
+             (test-output (elt-run- case-code test-forms case-init nil)))
+        (let* ((result-chunk (when (elt--result-chunk-p (car chunks))
+                               (pop chunks))))
+          (if generate
+              (error "TODO")
+            (unless result-chunk
+              (signal 'elt--missing-result nil))
+            (should (string= test-output
+                             (elt--read-chunk result-chunk test-buffer)))))))))
+
+(defun elt--read-chunk (chunk buffer)
+  (let ((beg (alist-get 'beg chunk))
+        (end (alist-get 'end chunk)))
+    (with-current-buffer buffer
+      (buffer-substring-no-properties beg end))))
+
+(defun elt--read-test-chunk (chunk buffer)
+  (unless (eq (alist-get 'type chunk) 'test)
+    (error "Expected a test chunk"))
+  (let ((chunk-string (elt--read-chunk chunk buffer)))
+    (car (read-from-string (concat "(" chunk-string ")")))))
+
+(defun elt--result-chunk-p (chunk)
+  (eq (alist-get 'type chunk) 'result))
 
 (defun elt--path (path)
   (let ((path (or path
@@ -304,7 +334,7 @@ test file, add a .el file with the same base name.")
 
 (defun elt--process-test-chunk (case-end current-chunk starting-chunk)
   (let* ((continuation (looking-at elt-code-chunk-next-re))
-         (test-forms (elt--read-test-chunk case-end))
+         (test-forms (elt---read-test-chunk case-end))
          (test-output (elt-run- (if continuation current-chunk starting-chunk)
                                 test-forms elt-init-alist
                                 continuation))
@@ -316,7 +346,7 @@ test file, add a .el file with the same base name.")
     (insert (concat "\n" test-output "\n\n"))
     test-output))
 
-(defun elt--read-test-chunk (case-end)
+(defun elt---read-test-chunk (case-end)
   (let* ((test-start (point))
          (test-end (if (re-search-forward "^$" case-end t)
                        (1- (match-beginning 0))
@@ -493,5 +523,9 @@ This is to `put' what `defalias' is to `fset'."
 
 (define-error 'elt--unknown-chunk-type
   "Can't find chunk type")
+
+(define-error 'elt--missing-result
+  "Can't find the result chunk. Do you need to generate results?")
+
 
 (provide 'elt)

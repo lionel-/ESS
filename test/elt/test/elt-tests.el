@@ -17,3 +17,13 @@
     (elt-load-file test-file)
     (should (string= (get 'elt-test-section 'elt-file)
                      test-file))))
+
+(ert-deftest elt-test-pass ()
+  (elt-load-file (expand-file-name "test-pass.md" elt-test-path))
+  (should (eq (type-of (ert-run-test (ert-get-test 'elt-test-section)))
+              'ert-test-passed)))
+
+(ert-deftest elt-test-missing-result ()
+  (elt-load-file (expand-file-name "test-missing-result.md" elt-test-path))
+  (should-error (ert-run-test (ert-get-test 'elt-test-section))
+                :type 'elt--missing-result))
