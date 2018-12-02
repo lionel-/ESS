@@ -69,31 +69,36 @@ test file, add a .el file with the same base name.")
 (defvar elt--section-re
   "^#+[ \t]\\(.+\\)$")
 
-(defun elt--define-test (info)
-  (let ((name (intern (elt--normalise-title (car info)))))
+(defun elt--define-test (info file)
+  (let ((name (intern (concat "elt-test-" (elt--normalise-title (pop info))))))
+    (put name 'elt-file file)
     (ert-set-test name
                   (make-ert-test
                    :name name
                    :body (lambda () (elt--run-tests name info))))))
 
 (defun elt-load-file (&optional path)
-  (let ((cases (elt--scan-cases path)))
-    (mapc #'elt--define-test cases)))
+  (let* ((path (elt--path path))
+         (cases (elt--scan-cases path)))
+    (mapc (lambda (info) (elt--define-test info path)) cases)))
 
 (defun elt--normalise-title (title)
-  (replace-regexp-in-string "[^[:alnum:]]" "-" title))
+  (downcase (replace-regexp-in-string "[^[:alnum:]]" "-" title)))
 
 (defun elt--run-tests (_name _info)
   (error "TODO"))
 
+(defun elt--path (path)
+  (let ((path (or path
+                  buffer-file-name
+                  (error "No PATH provided"))))
+    (unless (file-exists-p path)
+      (error "PATH does not exist"))
+    path))
+
 (defun elt--scan-cases (&optional path)
-  (setq path (or path
-                 buffer-file-name
-                 (error "No PATH provided")))
-  (unless (file-exists-p path)
-    (error "PATH does not exist"))
   (with-current-buffer
-      (find-file-noselect path)
+      (find-file-noselect (elt--path path))
     (let ((chunks (elt--scan-chunks))
           cases last-title)
       (while (cdr chunks)
