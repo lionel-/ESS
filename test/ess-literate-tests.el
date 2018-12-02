@@ -4,6 +4,9 @@
   (require 'cl-lib))
 (require 'ert)
 
+;; FIXME
+(require 'ess-r-mode)
+
 
 ;;*;; Configuration
 
@@ -77,6 +80,8 @@ test file, add a .el file with the same base name.")
   (setq path (or path
                  buffer-file-name
                  (error "No PATH provided")))
+  (unless (file-exists-p path)
+    (error "PATH does not exist"))
   (let ((cases (with-current-buffer
                    (find-file-noselect path)
                  (elt--scan-cases))))
@@ -93,7 +98,7 @@ test file, add a .el file with the same base name.")
         cases last-title)
     (while (cdr chunks)
       (unless (eq (alist-get 'type (car chunks)) 'case)
-        (error "Section must open with a case chunk"))
+        (signal 'elt--bad-case-chunk nil))
       (let ((title (save-excursion
                      (goto-char (alist-get 'beg (car chunks)))
                      (if (re-search-backward elt--section-re nil t)
@@ -471,3 +476,9 @@ This is to `put' what `defalias' is to `fset'."
         (unless (member symbol (cdr ps))
           (setcdr ps (cons symbol (cdr ps))))))
     (put symbol prop val)))
+
+
+(define-error 'elt--bad-case-chunk
+  "Section must open with a case chunk")
+
+(provide 'elt)

@@ -7,6 +7,7 @@
 
 (let ((current-directory (file-name-directory load-file-name)))
   (setq ess-test-path (expand-file-name "." current-directory))
+  (setq elt-test-path (expand-file-name "elt/test/" current-directory))
   (setq ess-root-path (expand-file-name "../lisp/" current-directory)))
 
 (add-to-list 'load-path ess-root-path)
@@ -35,6 +36,7 @@
   (load (expand-file-name "ess-indentation-tests.el" ess-test-path) nil t))
 (when (member "--literate" argv)
   (load (expand-file-name "ess-literate-tests.el" ess-test-path) nil t)
+  (load (expand-file-name "elt-tests.el" elt-test-path) nil t)
   (elt-r-deftest test-elt () "elt.R")
   (elt-r-deftest test-ess-roxy-literate () "roxy.R")
   (elt-r-deftest test-ess-r-code-fill () "code-fill.R")
