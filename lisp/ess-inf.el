@@ -457,6 +457,10 @@ Return non-nil if the process is in a ready (not busy) state."
                (format "%s .... %s" (substring string 0 50) (substring string -50))
              string))))
 
+(defun ess--proc-waiting-p (proc)
+  (or (process-get proc 'sec-prompt)
+      (not (process-get proc 'busy))))
+
 (defun inferior-ess-output-filter (proc string)
   "Standard output filter for the inferior ESS process PROC.
 Ring Emacs bell if process output starts with an ASCII bell, and pass
@@ -473,8 +477,7 @@ Taken from octave-mod.el."
   ;; be filtered. Process filters may be recursively called in that
   ;; case which could cause race conditions in the inferior buffer.
   (when (and (ess--eval-queue proc)
-             (or (process-get proc 'sec-prompt)
-                 (not (process-get proc 'busy))))
+             (ess--proc-waiting-p proc))
     (ess--send-line proc (ess--eval-queue-pop proc))))
 
 (defun inferior-ess-strip-ctrl-g (string)
@@ -1419,8 +1422,18 @@ TEXT."
         (when lines
           (if queue
               (ess--eval-queue-append lines inf-proc)
-            (ess--eval-queue-append (cdr lines) inf-proc)
-            (ess--send-line inf-proc (car lines)))))
+            (ess--send-line inf-proc (pop lines))
+            ;; Do as much blocking work as we can here because relying
+            ;; on the top level event loop makes evaluation visibly
+            ;; slow. Yield after 0.1s since that's the threshold for a
+            ;; perceptible response time.
+            (let ((time (float-time)))
+              (while (and lines
+                          (< (- (float-time) time) 0.100)
+                          (accept-process-output inf-proc 0.001)
+                          (ess--proc-waiting-p inf-proc))
+                (ess--send-line inf-proc (pop lines))))
+            (ess--eval-queue-append lines inf-proc))))
       (when eob
         (display-buffer inf-buf))
       ;; This used to be conditioned on EOB but this is no longer the
