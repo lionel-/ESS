@@ -947,17 +947,17 @@ and `ess-load-command', in that order."
   (and ess-load-command
        (format ess-load-command file)))
 
-(defun ess-wait-for-process (&optional proc sec-prompt wait force-redisplay timeout)
+(defun ess-wait-for-process (&optional proc sec-prompt seconds force-redisplay timeout)
   "Wait for 'busy property of the process to become nil.
 If SEC-PROMPT is non-nil return if secondary prompt is detected
-regardless of whether primary prompt was detected or not. If WAIT
-is non-nil wait for WAIT seconds for process output before the
-prompt check, default 0.002s. When FORCE-REDISPLAY is non-nil
-force redisplay. You better use WAIT >= 0.1 if you need
+regardless of whether primary prompt was detected or not. If
+SECONDS is nil, the default is to wait for 0.005 seconds for
+process output before the prompt check. When FORCE-REDISPLAY is
+non-nil force redisplay. You better use WAIT >= 0.1 if you need
 FORCE-REDISPLAY to avoid excessive redisplay. If TIMEOUT is
 non-nil stop waiting for output after TIMEOUT seconds."
   (setq proc (or proc (get-process ess-local-process-name)))
-  (setq wait (or wait 0.005))
+  (setq seconds (or seconds 0.005))
   (setq timeout (or timeout most-positive-fixnum))
   (let ((start-time (float-time))
         (elapsed 0))
@@ -969,14 +969,14 @@ non-nil stop waiting for output after TIMEOUT seconds."
                       (display-buffer (process-buffer proc)))
                     (error "ESS process has died unexpectedly")))
               (< elapsed timeout)
-              (or (accept-process-output proc wait)
+              (or (accept-process-output proc seconds)
                   (unless (and sec-prompt (process-get proc 'sec-prompt))
                     (process-get proc 'busy))))
         (when force-redisplay
           (redisplay 'force))
         (setq elapsed (- (float-time) start-time))
-        (when (>  elapsed .3)
-          (setq wait .3))))))
+        (when (> elapsed .3)
+          (setq seconds .3))))))
 
 (defun inferior-ess-ordinary-filter (proc string)
   (inferior-ess--set-status proc string)
