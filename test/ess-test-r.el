@@ -746,8 +746,7 @@ You are welcome to redistribute it under certain conditions.
 Type 'license()' or 'licence()' for distribution details.
 ¶"
 
-  :inf-result "
-> "
+  :inf-result ""
 
   :messages "No command at this point"
 

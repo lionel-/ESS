@@ -1377,51 +1377,54 @@ Run `comint-input-filter-functions' and
 TEXT."
   (ess-force-buffer-current "Process to use: ")
   ;; Use this to evaluate some code, but don't wait for output.
-  (let* ((deactivate-mark)           ; keep local {do *not* deactivate wrongly}
+  (let* ((deactivate-mark)  ; keep local {do *not* deactivate wrongly}
          (inf-proc (ess-get-process ess-current-process-name))
          (inf-buf (process-buffer inf-proc))
-         (win (get-buffer-window inf-buf t)))
-    (setq text (ess--concat-new-line-maybe
-                (ess--run-presend-hooks inf-proc text)))
+         (inf-win (get-buffer-window inf-buf t))
+         (text (ess--run-presend-hooks inf-proc text))
+         (text (propertize text 'field 'input 'front-sticky t)))
     (with-current-buffer inf-buf
-      (setq text (propertize text 'field 'input 'front-sticky t))
       (goto-char (marker-position (process-mark inf-proc)))
       (when (stringp invisibly)
         (insert-before-markers (concat "*** " invisibly " ***\n")))
-      ;; dbg:
-      ;; dbg (ess-write-to-dribble-buffer
-      ;; dbg  (format "(eval-visibly 2): text[%d]= '%s'\n" (length text) text))
-      (while (or (> (length text) 0) even-empty)
-        (setq even-empty nil)
-        (let* ((pos (string-match "\n\\|$" text))
-               (input (if (= (length text) 0)
-                          "\n"
-                        (concat (substring text 0 pos) "\n"))))
-          (setq text (substring text (min (length text) (1+ pos))))
-          (goto-char (marker-position (process-mark inf-proc)))
-          (when win
-            (set-window-point win (process-mark inf-proc)))
-          (unless invisibly
-            ;; for consistency with comint :(
-            (insert (propertize input 'font-lock-face 'comint-highlight-input))
-            (set-marker (process-mark inf-proc) (point)))
-          (inferior-ess-mark-as-busy inf-proc)
-          (process-send-string inf-proc input))
-        (when (or (> (length text) 0)
-                  wait-last-prompt)
-          (ess-wait-for-process inf-proc t (or wait-sec 0.001))))
+      (let ((lines (mapcar #'ess--concat-new-line-maybe
+                           (split-string text "\n" t)))
+            (eval-line (lambda (line wait)
+                         (ess--eval-line line inf-proc inf-win invisibly wait wait-sec))))
+        (cond (lines
+               (let ((first-lines (butlast lines))
+                     (last-line (car (last lines))))
+                 (dolist (line first-lines)
+                   (funcall eval-line line t))
+                 (funcall eval-line last-line wait-last-prompt)))
+              (even-empty
+               (funcall eval-line "\n" wait-last-prompt))))
       (when eob
         (display-buffer inf-buf))
       ;; This used to be conditioned on EOB but this is no longer the
       ;; case since commit fd90550d in 2012 (probably an accident)
       (goto-char (marker-position (process-mark inf-proc)))
-      (when win
-        (with-selected-window win
+      (when inf-win
+        (with-selected-window inf-win
           (goto-char (point))
           ;; this is crucial to avoid resetting window-point
           (recenter (- -1 scroll-margin))))))
   (when (numberp sleep-sec)
     (sleep-for sleep-sec)))
+
+(defun ess--eval-line (line inf-proc inf-win invisibly wait wait-sec)
+  (let ((mark (process-mark inf-proc)))
+    (goto-char (marker-position mark))
+    (when inf-win
+      (set-window-point inf-win mark)))
+  (unless invisibly
+    ;; for consistency with comint :(
+    (insert (propertize line 'font-lock-face 'comint-highlight-input))
+    (set-marker (process-mark inf-proc) (point)))
+  (inferior-ess-mark-as-busy inf-proc)
+  (process-send-string inf-proc line)
+  (when wait
+    (ess-wait-for-process inf-proc t (or wait-sec 0.001))))
 
 
 ;;;*;;; Evaluate only
