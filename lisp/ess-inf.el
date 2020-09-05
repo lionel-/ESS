@@ -1357,7 +1357,7 @@ similar to `load-library' Emacs function."
 ;;*;;  Evaluating lines, paragraphs, regions, and buffers.
 
 (defun ess-eval-linewise (text &optional invisibly eob even-empty
-                               wait-last-prompt sleep-sec wait-sec)
+                               _defunct sleep-sec wait-sec)
   "Evaluate TEXT in the ESS process buffer as if typed in w/o tabs.
 Waits for prompt after each line of input, so won't break on large texts.
 
@@ -1365,12 +1365,10 @@ If optional second arg INVISIBLY is non-nil, don't echo commands.
 If it is a string, just include that string. If optional third
 arg EOB is non-nil, display ESS process buffer after evaluation.
 If optional 4th arg EVEN-EMPTY is non-nil, also send empty
-text (e.g. an empty line). If 5th arg WAIT-LAST-PROMPT is
-non-nil, also wait for the prompt after the last line; if 6th arg
-SLEEP-SEC is a number, ESS will call '(\\[sleep-for] SLEEP-SEC)
-at the end of this function. If the 7th arg WAIT-SEC is set, it
-will be used instead of the default .001s and be passed to
-\\[ess-wait-for-process].
+text (e.g. an empty line). If 6th arg SLEEP-SEC is a number, ESS
+will call '(\\[sleep-for] SLEEP-SEC) at the end of this function.
+If the 7th arg WAIT-SEC is set, it will be used instead of the
+default of \\[ess-wait-for-process].
 
 Run `comint-input-filter-functions' and
 `ess-presend-filter-functions' of the associated PROCESS on the
@@ -1389,16 +1387,17 @@ TEXT."
         (insert-before-markers (concat "*** " invisibly " ***\n")))
       (let ((lines (mapcar #'ess--concat-new-line-maybe
                            (split-string text "\n" t)))
-            (eval-line (lambda (line wait)
-                         (ess--eval-line line inf-proc inf-win invisibly wait wait-sec))))
+            (eval-line (lambda (line)
+                         (ess--eval-line line inf-proc inf-win invisibly))))
         (cond (lines
                (let ((first-lines (butlast lines))
                      (last-line (car (last lines))))
                  (dolist (line first-lines)
-                   (funcall eval-line line t))
-                 (funcall eval-line last-line wait-last-prompt)))
+                   (funcall eval-line line)
+                   (ess-wait-for-process inf-proc t wait-sec))
+                 (funcall eval-line last-line)))
               (even-empty
-               (funcall eval-line "\n" wait-last-prompt))))
+               (funcall eval-line "\n"))))
       (when eob
         (display-buffer inf-buf))
       ;; This used to be conditioned on EOB but this is no longer the
@@ -1412,7 +1411,7 @@ TEXT."
   (when (numberp sleep-sec)
     (sleep-for sleep-sec)))
 
-(defun ess--eval-line (line inf-proc inf-win invisibly wait wait-sec)
+(defun ess--eval-line (line inf-proc inf-win invisibly)
   (let ((mark (process-mark inf-proc)))
     (goto-char (marker-position mark))
     (when inf-win
@@ -1422,9 +1421,7 @@ TEXT."
     (insert (propertize line 'font-lock-face 'comint-highlight-input))
     (set-marker (process-mark inf-proc) (point)))
   (inferior-ess-mark-as-busy inf-proc)
-  (process-send-string inf-proc line)
-  (when wait
-    (ess-wait-for-process inf-proc t (or wait-sec 0.001))))
+  (process-send-string inf-proc line))
 
 
 ;;;*;;; Evaluate only
@@ -2061,7 +2058,8 @@ in `ess-r-post-run-hook' or `ess-S+-post-run-hook'."
     (let ((command (ess-calculate-width 'window)))
       (if invisibly
           (ess-command command)
-        (ess-eval-linewise command nil nil nil 'wait-prompt)))))
+        (ess-eval-linewise command)
+        (ess-wait-for-process)))))
 
 (defun ess-calculate-width (opt)
   "Calculate width command given OPT.
@@ -2109,7 +2107,9 @@ buffers."
                  (not (process-get proc 'busy)))
         (setq command (ess-calculate-width ess-auto-width))
         (if ess-auto-width-visible
-            (ess-eval-linewise command nil nil nil 'wait-prompt)
+            (progn
+              (ess-eval-linewise command)
+              (ess-wait-for-process proc t))
           (ess-command command))))))
 
 (defun ess-execute (command &optional invert buff message)

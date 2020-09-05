@@ -165,7 +165,8 @@ is not already."
     (let ((input (inferior-ess-get-old-input)))
       (with-current-buffer ess-buf
         (goto-char (point-max))
-        (ess-eval-linewise input nil nil nil 1))))
+        (ess-eval-linewise input)
+        (ess-wait-for-process nil t))))
   (comint-next-prompt 1))
 
 (defun ess-transcript-copy-command ()

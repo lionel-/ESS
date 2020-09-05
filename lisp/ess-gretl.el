@@ -548,9 +548,6 @@ to gretl, put them in the variable `inferior-gretl-args'."
     (setq-local gretl-basic-offset 4)
     (setq indent-tabs-mode nil)
     (goto-char (point-max))
-    ;; (if inferior-ess-language-start
-    ;; 	(ess-eval-linewise inferior-ess-language-start
-    ;; 			   nil nil nil 'wait-prompt)))
     (with-current-buffer inf-buf
       (run-mode-hooks 'ess-gretl-post-run-hook))
     inf-buf))

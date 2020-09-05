@@ -280,7 +280,8 @@ Like `ess-rdired-view', but the object gets its own buffer name."
   (interactive)
   (let ((objname (tabulated-list-get-id)))
     (when (yes-or-no-p (format "Really delete %s? " objname))
-      (ess-eval-linewise (format "rm(%s)" (ess-rdired-quote objname)) nil nil nil t)
+      (ess-eval-linewise (format "rm(%s)" (ess-rdired-quote objname)))
+      (ess-wait-for-process)
       (revert-buffer))))
 
 (defun ess-rdired-switch-process ()

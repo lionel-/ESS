@@ -174,8 +174,8 @@ DIALECT is the desired ess-dialect. If nil, ask for dialect"
     (ess--setup-company ess-r-company-backends t)
 
     (when inferior-ess-language-start
-      (ess-eval-linewise inferior-ess-language-start
-                         nil nil nil 'wait-prompt))))
+      (ess-eval-linewise inferior-ess-language-start)
+      (ess-wait-for-process))))
 
 
  ; Provide package
