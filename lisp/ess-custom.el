@@ -495,7 +495,8 @@ only."
   :type '(choice (const :tag "Default" nil)
                  integer))
 
-(defcustom ess-use-tracebug t
+;; FIXME: Temporarily disabled
+(defcustom ess-use-tracebug nil
   "If t, load `ess-tracebug' when R process starts."
   :group 'ess-extras
   :type  'boolean)
@@ -1813,7 +1814,7 @@ Otherwise, they get their own temporary buffer."
 
 (defvaralias 'ess-eval-visibly-p 'ess-eval-visibly)
 
-(defcustom ess-eval-visibly 'nowait
+(defcustom ess-eval-visibly t
   "Non-nil means ess-eval- commands display commands in the process buffer.
 If 'nowait, ESS shows input commands in the process buffer, but
 doesn't wait for the process. Thus all the output is printed
