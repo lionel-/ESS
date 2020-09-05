@@ -472,10 +472,10 @@ Taken from octave-mod.el."
   ;; Should happen last since sending input might cause new output to
   ;; be filtered. Process filters may be recursively called in that
   ;; case which could cause race conditions in the inferior buffer.
-  (when (and ess--eval-queue
+  (when (and (ess--eval-queue proc)
              (or (process-get proc 'sec-prompt)
                  (not (process-get proc 'busy))))
-    (ess--send-line proc (pop ess--eval-queue))))
+    (ess--send-line proc (ess--eval-queue-pop proc))))
 
 (defun inferior-ess-strip-ctrl-g (string)
   "Strip leading `^G' character.
@@ -1363,7 +1363,21 @@ similar to `load-library' Emacs function."
 
 ;;*;;  Evaluating lines, paragraphs, regions, and buffers.
 
-(defvar ess--eval-queue nil)
+(defvar-local ess--eval-queue nil
+  "Queue for asynchronous evaluation.
+Purely process-local.")
+
+(defun ess--eval-queue (inf-proc)
+  (process-get inf-proc 'queue))
+
+(defun ess--eval-queue-append (lines inf-proc)
+  (let ((queue (append (ess--eval-queue inf-proc) lines)))
+    (process-put inf-proc 'queue queue)))
+
+(defun ess--eval-queue-pop (inf-proc)
+  (let ((queue (ess--eval-queue inf-proc)))
+    (process-put inf-proc 'queue (cdr queue))
+    (car queue)))
 
 (defun ess-eval-linewise (text &optional invisibly eob even-empty
                                defunct1 defunct2 defunct3)
@@ -1393,20 +1407,19 @@ TEXT."
          (text (ess--run-presend-hooks inf-proc text))
          (text (propertize text 'field 'input 'front-sticky t)))
     (with-current-buffer inf-buf
-      ;; TODO: parameterise the lines in the queue
-      ;; TODO: one queue per process!
       (goto-char (marker-position (process-mark inf-proc)))
       (when (stringp invisibly)
         (insert-before-markers (concat "*** " invisibly " ***\n")))
-      (let* ((lines (split-string text "\n" t))
+      (let* ((queue (ess--eval-queue inf-proc))
+             (lines (split-string text "\n" t))
              (lines (mapcar (lambda (line) (ess--make-queue-line line invisibly))
                             lines)))
         (when (and (not lines) even-empty)
           (setq lines (list "\n")))
         (when lines
-          (if ess--eval-queue
-              (setq ess--eval-queue (append ess--eval-queue lines))
-            (setq ess--eval-queue (append ess--eval-queue (cdr lines)))
+          (if queue
+              (ess--eval-queue-append lines inf-proc)
+            (ess--eval-queue-append (cdr lines) inf-proc)
             (ess--send-line inf-proc (car lines)))))
       (when eob
         (display-buffer inf-buf))
