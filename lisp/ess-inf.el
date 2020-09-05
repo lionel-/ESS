@@ -468,7 +468,14 @@ Taken from octave-mod.el."
   (if (process-get proc 'suppress-next-output?)
       ;; works only for suppressing short output, for time being is enough (for callbacks)
       (process-put proc 'suppress-next-output? nil)
-    (comint-output-filter proc (inferior-ess-strip-ctrl-g string))))
+    (comint-output-filter proc (inferior-ess-strip-ctrl-g string)))
+  ;; Should happen last since sending input might cause new output to
+  ;; be filtered. Process filters may be recursively called in that
+  ;; case which could cause race conditions in the inferior buffer.
+  (when (and ess--eval-queue
+             (or (process-get proc 'sec-prompt)
+                 (not (process-get proc 'busy))))
+    (ess--send-line proc (pop ess--eval-queue))))
 
 (defun inferior-ess-strip-ctrl-g (string)
   "Strip leading `^G' character.
@@ -1356,8 +1363,10 @@ similar to `load-library' Emacs function."
 
 ;;*;;  Evaluating lines, paragraphs, regions, and buffers.
 
+(defvar ess--eval-queue nil)
+
 (defun ess-eval-linewise (text &optional invisibly eob even-empty
-                               defunct1 defunct2 wait-sec)
+                               defunct1 defunct2 defunct3)
   "Evaluate TEXT in the ESS process buffer as if typed in w/o tabs.
 Waits for prompt after each line of input, so won't break on large texts.
 
@@ -1373,8 +1382,8 @@ default of \\[ess-wait-for-process].
 Run `comint-input-filter-functions' and
 `ess-presend-filter-functions' of the associated PROCESS on the
 TEXT."
-  (when (or defunct1 defunct2)
-    (warn "WAIT-FOR-PROMPT and SLEEP-SEC are defunct"))
+  (when (or defunct1 defunct2 defunct3)
+    (warn "WAIT-FOR-PROMPT, SLEEP-SEC, and WAIT-SEC are defunct"))
   (ess-force-buffer-current "Process to use: ")
   ;; Use this to evaluate some code, but don't wait for output.
   (let* ((deactivate-mark)  ; keep local {do *not* deactivate wrongly}
@@ -1384,22 +1393,21 @@ TEXT."
          (text (ess--run-presend-hooks inf-proc text))
          (text (propertize text 'field 'input 'front-sticky t)))
     (with-current-buffer inf-buf
+      ;; TODO: parameterise the lines in the queue
+      ;; TODO: one queue per process!
       (goto-char (marker-position (process-mark inf-proc)))
       (when (stringp invisibly)
         (insert-before-markers (concat "*** " invisibly " ***\n")))
-      (let ((lines (mapcar #'ess--concat-new-line-maybe
-                           (split-string text "\n" t)))
-            (eval-line (lambda (line)
-                         (ess--eval-line line inf-proc inf-win invisibly))))
+      (let* ((lines (split-string text "\n" t))
+             (lines (mapcar (lambda (line) (ess--make-queue-line line invisibly))
+                            lines)))
         (when (and (not lines) even-empty)
           (setq lines (list "\n")))
-        (let ((first-lines (butlast lines))
-              (last-line (car (last lines))))
-          (dolist (line first-lines)
-            (funcall eval-line line)
-            (ess-wait-for-process inf-proc t wait-sec))
-          (when last-line
-            (funcall eval-line last-line))))
+        (when lines
+          (if ess--eval-queue
+              (setq ess--eval-queue (append ess--eval-queue lines))
+            (setq ess--eval-queue (append ess--eval-queue (cdr lines)))
+            (ess--send-line inf-proc (car lines)))))
       (when eob
         (display-buffer inf-buf))
       ;; This used to be conditioned on EOB but this is no longer the
@@ -1411,17 +1419,25 @@ TEXT."
           ;; this is crucial to avoid resetting window-point
           (recenter (- -1 scroll-margin)))))))
 
-(defun ess--eval-line (line inf-proc inf-win invisibly)
-  (let ((mark (process-mark inf-proc)))
-    (goto-char (marker-position mark))
-    (when inf-win
-      (set-window-point inf-win mark)))
-  (unless invisibly
-    ;; for consistency with comint :(
-    (insert (propertize line 'font-lock-face 'comint-highlight-input))
-    (set-marker (process-mark inf-proc) (point)))
-  (inferior-ess-mark-as-busy inf-proc)
-  (process-send-string inf-proc line))
+(defun ess--make-queue-line (line invisibly)
+  (let ((line (ess--concat-new-line-maybe line)))
+    (list line :invisibly invisibly)))
+
+(defun ess--send-line (inf-proc line)
+  (with-current-buffer (process-buffer inf-proc)
+    (let ((mark (process-mark inf-proc))
+          (inf-win (get-buffer-window (current-buffer) t))
+          (string (car line))
+          (props (cdr line)))
+      (goto-char (marker-position mark))
+      (when inf-win
+        (set-window-point inf-win mark))
+      (unless (plist-get props :invisibly)
+        ;; For consistency with comint
+        (insert (propertize string 'font-lock-face 'comint-highlight-input))
+        (set-marker mark (point)))
+      (inferior-ess-mark-as-busy inf-proc)
+      (process-send-string inf-proc string))))
 
 
 ;;;*;;; Evaluate only
