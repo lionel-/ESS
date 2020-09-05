@@ -1391,15 +1391,15 @@ TEXT."
                            (split-string text "\n" t)))
             (eval-line (lambda (line)
                          (ess--eval-line line inf-proc inf-win invisibly))))
-        (cond (lines
-               (let ((first-lines (butlast lines))
-                     (last-line (car (last lines))))
-                 (dolist (line first-lines)
-                   (funcall eval-line line)
-                   (ess-wait-for-process inf-proc t wait-sec))
-                 (funcall eval-line last-line)))
-              (even-empty
-               (funcall eval-line "\n"))))
+        (when (and (not lines) even-empty)
+          (setq lines (list "\n")))
+        (let ((first-lines (butlast lines))
+              (last-line (car (last lines))))
+          (dolist (line first-lines)
+            (funcall eval-line line)
+            (ess-wait-for-process inf-proc t wait-sec))
+          (when last-line
+            (funcall eval-line last-line))))
       (when eob
         (display-buffer inf-buf))
       ;; This used to be conditioned on EOB but this is no longer the
