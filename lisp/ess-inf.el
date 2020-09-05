@@ -1357,7 +1357,7 @@ similar to `load-library' Emacs function."
 ;;*;;  Evaluating lines, paragraphs, regions, and buffers.
 
 (defun ess-eval-linewise (text &optional invisibly eob even-empty
-                               _defunct sleep-sec wait-sec)
+                               defunct1 defunct2 wait-sec)
   "Evaluate TEXT in the ESS process buffer as if typed in w/o tabs.
 Waits for prompt after each line of input, so won't break on large texts.
 
@@ -1373,6 +1373,8 @@ default of \\[ess-wait-for-process].
 Run `comint-input-filter-functions' and
 `ess-presend-filter-functions' of the associated PROCESS on the
 TEXT."
+  (when (or defunct1 defunct2)
+    (warn "WAIT-FOR-PROMPT and SLEEP-SEC are defunct"))
   (ess-force-buffer-current "Process to use: ")
   ;; Use this to evaluate some code, but don't wait for output.
   (let* ((deactivate-mark)  ; keep local {do *not* deactivate wrongly}
@@ -1407,9 +1409,7 @@ TEXT."
         (with-selected-window inf-win
           (goto-char (point))
           ;; this is crucial to avoid resetting window-point
-          (recenter (- -1 scroll-margin))))))
-  (when (numberp sleep-sec)
-    (sleep-for sleep-sec)))
+          (recenter (- -1 scroll-margin)))))))
 
 (defun ess--eval-line (line inf-proc inf-win invisibly)
   (let ((mark (process-mark inf-proc)))
