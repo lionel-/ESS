@@ -409,16 +409,17 @@ Return non-nil if the process is in a ready (not busy) state."
 
 (defun inferior-ess--set-status-sentinel (proc output-buf sentinel)
   (with-current-buffer output-buf
-    (save-excursion
-      (save-match-data
-        ;; The only assumption is that the prompt finishes with "> "
-        (goto-char (- (point-max) 2))
-        (when (looking-at inferior-ess-primary-prompt)
-          (goto-char (point-min))
-          (when (re-search-forward (concat "^\\(" sentinel "[\n\r]+\\)") nil t)
-            (delete-region (match-beginning 0) (match-end 0))
-            (process-put proc 'busy nil)
-            (process-put proc 'ess-output-sentinel nil)))))))
+    (ess--with-process-variables (inferior-ess-primary-prompt)
+      (save-excursion
+        (save-match-data
+          ;; The only assumption is that the prompt finishes with "> "
+          (goto-char (- (point-max) 2))
+          (when (looking-at inferior-ess-primary-prompt)
+            (goto-char (point-min))
+            (when (re-search-forward (concat "^\\(" sentinel "[\n\r]+\\)") nil t)
+              (delete-region (match-beginning 0) (match-end 0))
+              (process-put proc 'busy nil)
+              (process-put proc 'ess-output-sentinel nil))))))))
 
 (defun inferior-ess-mark-as-busy (proc)
   "Put PROC's busy value to t."
@@ -1259,8 +1260,7 @@ wrapping the code into:
         (inhibit-quit t)
         (sentinel (inferior-ess--output-sentinel)))
     (with-current-buffer (process-buffer proc)
-      (let ((primary-prompt inferior-ess-primary-prompt)
-            (oldpb (process-buffer proc))
+      (let ((oldpb (process-buffer proc))
             (oldpf (process-filter proc))
             (oldpm (marker-position (process-mark proc)))
             (use-sentinel (alist-get 'use-sentinel ess-format-command-alist))
@@ -1279,7 +1279,7 @@ wrapping the code into:
               (set-process-buffer proc out-buffer)
               (set-process-filter proc 'inferior-ess-ordinary-filter)
               (with-current-buffer out-buffer
-                (setq inferior-ess-primary-prompt primary-prompt)
+                (setq ess-local-process-name (process-name proc))
                 (setq buffer-read-only nil)
                 (erase-buffer)
                 (set-marker (process-mark proc) (point-min))

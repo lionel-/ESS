@@ -184,6 +184,21 @@ Drops 'nil' entries."
 
 (define-obsolete-function-alias 'ess-line-to-list-of-words #'split-string "ESS 19.04")
 
+(defmacro ess--with-buffer-variables (buffer vars &rest body)
+  (declare (indent 2)
+           (debug (&rest form)))
+  `(let ((ess--wpv-buf ,buffer))
+     (let (,@(mapcar (lambda (var) `(,var (buffer-local-value ',var ess--wpv-buf)))
+                     vars))
+       ,@body)))
+
+(defmacro ess--with-process-variables (vars &rest body)
+  (declare (indent 1)
+           (debug (&rest form)))
+  (macroexpand
+   `(ess--with-buffer-variables (ess-get-process-buffer) ,vars
+      ,@body)))
+
 
 ;;*;; System
 
